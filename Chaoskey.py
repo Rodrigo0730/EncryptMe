@@ -1,7 +1,5 @@
-import numpy as np
 import math
-import secrets
-"from nistrng import *"
+import hashlib
 
 class PRNG:
     def __init__(self):
@@ -31,8 +29,6 @@ class PRNG:
         return bit_sequence
 
     def bits_to_bytes(self, bit_sequence):
-        bit_sequence = [secrets.choice(bit_sequence) for i in range(len(bit_sequence))]
-        # Convert a list of bits to a bytes object
         n = len(bit_sequence) // 8
         return bytes([int(''.join(map(str, bit_sequence[i:i + 8])), 2) for i in range(0, n * 8, 8)])
 
@@ -43,42 +39,30 @@ class PRNG:
         random_bytes = self.bits_to_bytes(bit_sequence[:num_bytes * 8])
         return random_bytes
 
-    def generate_key(self, length):
-        num_iterations = 8000
+    def generate_key(self, password, length):
+        salt_from_password = hashlib.sha256(password.encode()).digest()[:16]
+        hashed_password = hashlib.pbkdf2_hmac("sha256", password.encode(), salt_from_password, 100000)
+
+        offset = int.from_bytes(hashed_password[:2], "big") / 65536.0 * 0.2 - 0.1
+        print(f"offset: {offset}")
+
+        x_initial = self.safe_values[0][0] + offset
+        mu = self.safe_values[0][1] + offset
+        num_iterations = 10000
         num_bytes = length
-        x_initial, mu = self.safe_values[0]
         random_bytes = self.generate_bytes(x_initial, mu, num_iterations=num_iterations, num_bytes=num_bytes)
         return random_bytes
 
-    """def run_tests(self):
 
-        bit_seq = np.array(self.generate_bit_sequence(x_initial=0.27, mu=3.99, num_iterations=8000))
-
-        eligible_battery: dict = check_eligibility_all_battery(bit_seq, SP800_22R1A_BATTERY)
-
-        # Print the eligible tests
-        print("Eligible test from NIST-SP800-22r1a:")
-        for name in eligible_battery.keys():
-            print("-" + name)
-
-        # Test the sequence on the eligible tests
-            results = run_all_battery(bit_seq, eligible_battery, False)
-
-        # Print results one by one
-        print("Test results:")
-        for result, elapsed_time in results:
-            if result.passed:
-                print("- PASSED - score: " + str(np.round(result.score, 3)) + " - " + result.name + " - elapsed time: " + str(elapsed_time) + " ms")
-            else:
-                print("- FAILED - score: " + str(np.round(result.score, 3)) + " - " + result.name + " - elapsed time: " + str(elapsed_time) + " ms")
-    """
+    
 if __name__ == "__main__":
 
     #example usage
     prng = PRNG()
-    #prng.run_tests()
-    key = prng.generate_key(32)
+    password = "pepE"
+    key = prng.generate_key(password, 16)
     print(key, f"Key length: {len(key)}")
+   
 
 
     """
