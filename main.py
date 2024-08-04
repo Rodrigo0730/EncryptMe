@@ -2,7 +2,7 @@ import os, sys, string
 import psutil
 import customtkinter as ctk
 from PIL import Image, ImageDraw
-from tkinter import messagebox, filedialog, Toplevel
+from tkinter import messagebox
 
 ctk.set_default_color_theme("styles.json")
 
