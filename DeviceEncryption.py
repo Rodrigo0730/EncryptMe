@@ -6,6 +6,8 @@ import Chaoskey as ck
 import os
 import psutil
 import hashlib
+import zlib
+import struct
 
 
 class AES:
@@ -65,12 +67,13 @@ class AES:
         cipher = Cipher(algorithms.AES(key), modes.GCM(iv), backend=default_backend())
         encryptor = cipher.encryptor()
         encrypted_data = encryptor.update(data) + encryptor.finalize()
-        encrypted_data_with_tag = encrypted_data + encryptor.tag
-        return iv, encrypted_data_with_tag
+        encrypted_data_with_tag = iv + encryptor.tag + encrypted_data
+        return encrypted_data_with_tag
 
-    def decrypt(self, iv, encrypted_data_with_tag):
-        encrypted_data = encrypted_data_with_tag[:-16]
-        tag = encrypted_data_with_tag[-16:]
+    def decrypt(self, encrypted_data_with_tag):
+        iv = encrypted_data_with_tag[:12]
+        tag = encrypted_data_with_tag[12:28]
+        encrypted_data = encrypted_data_with_tag[28:]
         cipher = Cipher(
             algorithms.AES(self._get_aes_key()),
             modes.GCM(iv, tag),
@@ -139,7 +142,7 @@ def encryptDirectory(directory, password, progress_callback=None):
         aes = AES(password)
         device = directory
         outputFilePath = os.path.join(device, "encrypted_data.aes")
-        data = {}
+        data = b""
 
         total_files = sum(len(files) for _, _, files in os.walk(device))
         processed_files = 0
@@ -150,35 +153,42 @@ def encryptDirectory(directory, password, progress_callback=None):
                 relativePath = os.path.relpath(inputFilePath, device)
 
                 with open(inputFilePath, "rb") as f:
-                    data[relativePath] = f.read()
-                
+                    file_data = f.read()
+
+                if "System Volume Information" in relativePath or file.startswith('.'):
+                    continue
+
+                compressed_data = zlib.compress(file_data)
+                path_length = len(relativePath.encode("utf-8"))
+                data += struct.pack(f'<I{path_length}sI', path_length, relativePath.encode(), len(compressed_data))
+                data += compressed_data
+
                 processed_files += 1
                 if progress_callback:
                     progress = (processed_files / total_files) * 100
                     progress_callback(progress)
 
-        all_data = "\n".join(
-            f"{path}:{content.hex()}" for path, content in data.items()
-        ).encode()
-        hashed_data = hashlib.sha256(all_data).hexdigest()
-        data_with_hash = f"{hashed_data}\n".encode() + all_data
+        hashed_data = hashlib.sha256(data).digest()
+        data_with_hash = hashed_data + data
 
-        iv, encrypted_data_with_tag = aes.encrypt(data_with_hash)
+        encrypted_data_with_tag = aes.encrypt(data_with_hash)
 
         with open(outputFilePath, "wb") as f:
-            f.write(iv + encrypted_data_with_tag)
+            f.write(encrypted_data_with_tag)
             f.flush()
             os.fsync(f.fileno())
 
         for root, _, files in os.walk(device):
             for file in files:
                 inputFilePath = os.path.join(root, file)
-                if inputFilePath == outputFilePath:
+                if inputFilePath == outputFilePath or "System Volume Information" in inputFilePath or file.startswith('.'):
                     continue
                 else:
                     os.remove(inputFilePath)
         for root, dirs, _ in os.walk(device, topdown=False):
             for dir in dirs:
+                if dir == "System Volume Information" or dir.startswith('.'):
+                    continue
                 os.rmdir(os.path.join(root, dir))
     except ValueError as e:
         print(e)
@@ -191,36 +201,48 @@ def decryptDirectory(password):
     outputDirectory = device
 
     with open(inputFilePath, "rb") as f:
-        iv = f.read(12)
         encrypted_data_with_tag = f.read()
 
     try:
-        data_with_hash = aes.decrypt(iv, encrypted_data_with_tag)
+        data_with_hash = aes.decrypt(encrypted_data_with_tag)
     except Exception:
         print("Password is incorrect")
         return
 
-    stored_hash, data = data_with_hash.decode().split("\n", 1)
-    hash = hashlib.sha256(data.encode()).hexdigest()
+    stored_hash = data_with_hash[:32]
+    data = data_with_hash[32:]
+    hash = hashlib.sha256(data).digest()
 
     if stored_hash != hash:
         print("Hash mismatch")
         return
 
-    for entry in data.split("\n"):
-        relativePath, content = entry.split(":", 1)
+    index = 0
+    while index < len(data):
+        path_length = struct.unpack("<I",data[index:index+4])[0]
+        index += 4
+        relativePath = data[index:index+path_length].decode()
+        index += path_length
+        data_length = struct.unpack("<I", data[index:index+4])[0]
+        index += 4
+        compressed_data = data[index:index+data_length]
+        index += data_length
+        file_data = zlib.decompress(compressed_data)
+
         outputFilePath = os.path.join(outputDirectory, relativePath)
 
-        os.makedirs(os.path.dirname(outputFilePath), exist_ok=True)
+        if not os.path.exists(os.path.dirname(outputFilePath)):
+            os.makedirs(os.path.dirname(outputFilePath), exist_ok=True)
         with open(outputFilePath, "wb") as f:
-            f.write(bytes.fromhex(content))
+            f.write(file_data)
 
     print("Decryption completed successfully")
 
     os.remove(inputFilePath)
 
-
 def main():
+    directory = recognize_drives()[0]
+    encryptDirectory(directory, "Password1:")
     decryptDirectory("Password1:")
 
 
