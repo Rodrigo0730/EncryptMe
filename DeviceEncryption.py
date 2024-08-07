@@ -2,7 +2,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-import Chaoskey as ck
+import chaosrandom
 import os
 import psutil
 import hashlib
@@ -11,24 +11,23 @@ import struct
 
 
 class AES:
-    def __init__(self, password, key_file=None):
+    def __init__(self, password, salt=None):
         self.check_password_requirements(password)
-        if isinstance(password, str):
-            self.password = password.encode("utf-8")
-        else:
-            self.password = password
+        self.password = password.encode("utf-8") if isinstance(password, str) else password
+
         self.key = None
+        self.salt = salt
 
-        if key_file:
-            self.load_key_from_file(key_file)
+        self.key, self.salt = self._derive_key_and_salt()
+
+    def _derive_key_and_salt(self):
+        if self.salt is None:
+            prng = chaosrandom.PRNG()
+            salt = prng.generate_key(16)
         else:
-            self.key = self._derive_aes_key()
+            salt = self.salt
 
-    def _derive_aes_key(self):
         try:
-            # Generate a random 256-bit key using PBKDF2HMAC with a PRNG generated salt
-            prng = ck.PRNG()
-            salt = prng.generate_key(self.password, 16)
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
                 length=32,
@@ -36,34 +35,19 @@ class AES:
                 iterations=1000000,
                 backend=default_backend(),
             )
-            return kdf.derive(self.password)
+            return kdf.derive(self.password), salt
         except Exception as e:
             raise ValueError("Error deriving AES key: {}".format(e))
 
     def _get_aes_key(self):
         if self.key is None:
-            self.key = self._derive_aes_key()
-        return self.key
-
-    def save_key_to_file(self, key_file):
-        try:
-            with open(key_file, "wb") as f:
-                key = self._get_aes_key()
-                f.write(key)
-        except Exception as e:
-            raise ValueError("Error saving key to file: {}".format(e))
-
-    def load_key_from_file(self, key_file):
-        try:
-            with open(key_file, "rb") as f:
-                self.key = f.read()
-        except Exception as e:
-            raise ValueError("Error loading key from file: {}".format(e))
+            self.key, self.salt = self._derive_aes_key()
+        return self.key, self.salt
 
     def encrypt(self, data):
-        prng = ck.PRNG()
-        iv = prng.generate_key(self.password, 12)
-        key = self._get_aes_key()
+        prng = chaosrandom.PRNG()
+        iv = prng.generate_key(12)
+        key, _ = self._get_aes_key()
         cipher = Cipher(algorithms.AES(key), modes.GCM(iv), backend=default_backend())
         encryptor = cipher.encryptor()
         encrypted_data = encryptor.update(data) + encryptor.finalize()
@@ -74,8 +58,9 @@ class AES:
         iv = encrypted_data_with_tag[:12]
         tag = encrypted_data_with_tag[12:28]
         encrypted_data = encrypted_data_with_tag[28:]
+        key, _ = self._get_aes_key()
         cipher = Cipher(
-            algorithms.AES(self._get_aes_key()),
+            algorithms.AES(key),
             modes.GCM(iv, tag),
             backend=default_backend(),
         )
@@ -139,7 +124,8 @@ def recognize_drives():
 
 def encryptDirectory(directory, password, progress_callback=None):
     try:
-        aes = AES(password)
+        aes = AES(password, salt=None)
+        salt = aes.salt
         device = directory
         outputFilePath = os.path.join(device, "encrypted_data.aes")
         data = b""
@@ -174,7 +160,7 @@ def encryptDirectory(directory, password, progress_callback=None):
         encrypted_data_with_tag = aes.encrypt(data_with_hash)
 
         with open(outputFilePath, "wb") as f:
-            f.write(encrypted_data_with_tag)
+            f.write(salt + encrypted_data_with_tag)
             f.flush()
             os.fsync(f.fileno())
 
@@ -194,14 +180,18 @@ def encryptDirectory(directory, password, progress_callback=None):
         print(e)
 
 
-def decryptDirectory(password):
-    aes = AES(password)
-    device = recognize_drives()[0]
+def decryptDirectory(directory, password):
+    device = directory
     inputFilePath = os.path.join(device, "encrypted_data.aes")
     outputDirectory = device
 
     with open(inputFilePath, "rb") as f:
+        salt = f.read(16)
+        print(salt, type(salt))
         encrypted_data_with_tag = f.read()
+
+    aes = AES(password, salt=salt)
+    print(aes.salt == salt)
 
     try:
         data_with_hash = aes.decrypt(encrypted_data_with_tag)
@@ -242,8 +232,8 @@ def decryptDirectory(password):
 
 def main():
     directory = recognize_drives()[0]
-    encryptDirectory(directory, "Password1:")
-    decryptDirectory("Password1:")
+    encryptDirectory(directory=directory, password="Password1:")
+    decryptDirectory(directory=directory, password="Password1:")
 
 
 if __name__ == "__main__":
