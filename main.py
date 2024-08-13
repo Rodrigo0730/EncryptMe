@@ -1,13 +1,245 @@
 import os
 import string
-import psutil
-import customtkinter as ctk
-from PIL import Image, ImageDraw
-from tkinter import messagebox
-import DeviceEncryption
 import threading
+from tkinter import messagebox
+
+import customtkinter as ctk
+import psutil
+from PIL import Image, ImageDraw
+
+import DeviceEncryption
 
 ctk.set_default_color_theme("styles.json")
+
+class TopEncryption(ctk.CTkToplevel):
+    def __init__(self, parent, device):
+        super().__init__(parent)
+        self.device = device
+        self.title(f"Encryption of {self.device}")
+        self.geometry("400x500")
+
+        self.after(250, lambda: self.iconbitmap("images/logo_color.ico"))
+        self.resizable(False, False)
+
+        def check_password(event):
+            special_chars = string.punctuation
+            pw = self.passwordEntryEncryption.get()
+            update_label(requirements["length"][1], len(pw) >= 8)
+            update_label(
+                requirements["uppercase"][1], any(char.isupper() for char in pw)
+            )
+            update_label(
+                requirements["lowercase"][1], any(char.islower() for char in pw)
+            )
+            update_label(requirements["digit"][1], any(char.isdigit() for char in pw))
+            update_label(
+                requirements["special"][1], any(char in special_chars for char in pw)
+            )
+
+        label_height = 25
+
+        def update_label(label, condition):
+            if condition:
+                label.configure(text="✔️", text_color="green")
+            else:
+                label.configure(text="❌", text_color="red")
+
+        self.progressBar = ctk.CTkProgressBar(
+            self, width=200, height=15, progress_color="green"
+        )
+        self.progressBar.set(0)
+        self.progressBar.grid(row=8, column=1, columnspan=3, padx=0, sticky="ew")
+        self.progressLabel = ctk.CTkLabel(self, text="0%", text_color="white")
+        self.progressLabel.grid(row=8, column=4, padx=(10, 0))
+
+        def update_progress(processed_files, total_files):
+            progress = processed_files / total_files
+            self.progressBar.set(progress)
+            self.progressLabel.configure(text=f"{progress*100:.2f}%")
+
+        def encryption_process():
+            if not all(label[1].cget("text") == "✔️" for label in requirements.values()):
+                messagebox.showerror("Error", "Please meet all password requirements!")
+                return
+            password = self.passwordEntryEncryption.get()
+
+            def run_encryption():
+                DeviceEncryption.encryptDirectory(
+                    self.device, password, update_progress
+                )
+                messagebox.showinfo("Success", "Encryption completed!")
+
+            encryption_thread = threading.Thread(target=run_encryption)
+            encryption_thread.start()
+            self.after(1000, check_if_running, encryption_thread, self)
+
+        def check_if_running(thread, window):
+            if thread.is_alive():
+                window.after(1000, check_if_running, thread, window)
+            else:
+                window.destroy()
+                window.update()
+
+
+        requirements = {
+            "length": [
+                ctk.CTkLabel(
+                    self,
+                    text="At least 8 characters",
+                    fg_color=("white", "gray75"),
+                    corner_radius=8,
+                    text_color="black",
+                    height=20,
+                    anchor="w",
+                ),
+                ctk.CTkLabel(self, text="❌", text_color="red", height=label_height),
+            ],
+            "uppercase": [
+                ctk.CTkLabel(
+                    self,
+                    text="At least one uppercase letter",
+                    fg_color=("white", "gray75"),
+                    corner_radius=8,
+                    text_color="black",
+                    height=20,
+                    anchor="w",
+                ),
+                ctk.CTkLabel(self, text="❌", text_color="red", height=label_height),
+            ],
+            "lowercase": [
+                ctk.CTkLabel(
+                    self,
+                    text="At least one lowercase letter",
+                    fg_color=("white", "gray75"),
+                    corner_radius=8,
+                    text_color="black",
+                    height=20,
+                    anchor="w",
+                ),
+                ctk.CTkLabel(self, text="❌", text_color="red", height=label_height),
+            ],
+            "digit": [
+                ctk.CTkLabel(
+                    self,
+                    text="At least one digit",
+                    fg_color=("white", "gray75"),
+                    corner_radius=8,
+                    text_color="black",
+                    height=20,
+                    anchor="w",
+                ),
+                ctk.CTkLabel(self, text="❌", text_color="red", height=label_height),
+            ],
+            "special": [
+                ctk.CTkLabel(
+                    self,
+                    text="At least one special character",
+                    fg_color=("white", "gray75"),
+                    corner_radius=8,
+                    text_color="black",
+                    height=20,
+                    anchor="w",
+                ),
+                ctk.CTkLabel(self, text="❌", text_color="red", height=label_height),
+            ],
+        }
+
+        self.passwordEntryEncryption = ctk.CTkEntry(
+            self,
+            placeholder_text="Enter password:",
+            show="*",
+            height=30,
+            font=("", 13),
+        )
+        self.passwordEntryEncryption.grid(
+            row=1, column=1, columnspan=4, padx=0, pady=(0, 30), sticky="ew"
+        )
+        self.passwordEntryEncryption.bind("<KeyRelease>", check_password)
+
+        for i, label in enumerate(requirements.values(), start=1):
+            label[0].grid(
+                row=i + 1, column=2, columnspan=3, padx=(0, 10), pady=3, sticky="ew"
+            )
+            label[1].grid(row=i + 1, column=1, pady=3, sticky="ew")
+
+        self.encryptButton = ctk.CTkButton(
+            self, text="Encrypt Device", command=encryption_process
+        )
+        self.encryptButton.grid(row=7, column=1, columnspan=4, padx=0, pady=30, sticky="ew")
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(9, weight=1)
+
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(5, weight=1)
+
+class TopDecryption(ctk.CTkToplevel):
+    def __init__(self, parent, device):
+        super().__init__(parent)
+        self.device = device
+        self.title(f"Decryption of {self.device}")
+        self.geometry("400x300")
+
+        self.after(250, lambda: self.iconbitmap("images/logo_color.ico"))
+        self.resizable(False, False)
+
+        def update_progress(processed_files, total_files):
+            progress = processed_files / total_files
+            self.progressBar.set(progress)
+            self.progressLabel.configure(text=f"{progress*100:.2f}%")
+
+        def decryption_process():
+            password = self.passwordEntryDecryption.get()
+
+            def run_decryption():
+                try:
+                    DeviceEncryption.decryptDirectory(
+                        self.device, password, update_progress
+                    )
+                    messagebox.showinfo("Success", "Decryption completed!")
+
+                except ValueError as e:
+                    messagebox.showerror("Error", f"{str(e)}, try again!")
+                    self.passwordEntryDecryption.delete(0, "end")
+
+            decryption_thread = threading.Thread(target=run_decryption)
+            decryption_thread.start()
+            self.after(500, check_if_running, decryption_thread, self)
+
+        def check_if_running(thread, window):
+            if thread.is_alive():
+                window.after(500, check_if_running, thread, window)
+            else:
+                window.destroy()
+                window.update()
+
+        self.passwordEntryDecryption = ctk.CTkEntry(
+            self,
+            placeholder_text="Enter password:",
+            show="*",
+            height=30,
+            font=("", 13),
+        )
+        self.passwordEntryDecryption.grid(
+            row=1, column=1, columnspan=4, padx=0, pady=(20, 0), sticky="ew"
+        )
+
+        self.decryptButton = ctk.CTkButton(
+            self, text="Decrypt Device", command=decryption_process
+        )
+        self.decryptButton.grid(row=2, column=1, columnspan=4, padx=0, pady=20, sticky="ew")
+
+        self.progressBar = ctk.CTkProgressBar(
+            self, width=200, height=15, progress_color="green"
+        )
+        self.progressBar.set(0)
+        self.progressBar.grid(row=3, column=1, columnspan=3, padx=0, sticky="ew")
+        self.progressLabel = ctk.CTkLabel(self, text="0%", text_color="white")
+        self.progressLabel.grid(row=3, column=4, padx=(10, 0))
+
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(4, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(5, weight=1)
 
 class MainApp(ctk.CTk):
     def __init__(self):
@@ -42,169 +274,39 @@ class MainApp(ctk.CTk):
         self.EncryptButton = ctk.CTkButton(
             self,
             text="Encrypt",
-            command=self.encrypt_window,
+            command=self.open_encryption_window,
         )
         self.EncryptButton.grid(row=3, column=1, padx=0, pady=10)
         self.DecryptButton = ctk.CTkButton(
             self,
             text="Decrypt",
-            command=self.decrypt_window,
+            command=self.open_decryption_window,
         )
         self.DecryptButton.grid(row=4, column=1, padx=0, pady=10)
+
+        self.top_window_encryption = None
+        self.top_window_decryption = None
 
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(5, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
-    def encryptionWindow(self):
-        window = ctk.CTkToplevel(self)
-        window.title(f"Encryption of {self.Dropdown.get()}")
-        window.geometry("400x500")
-
-        window.after(250, lambda: window.iconbitmap("images/logo_color.ico"))
-        window.resizable(False, False)
-
-        def check_password(event):
-            special_chars = string.punctuation
-            pw = passwordEntry.get()
-            update_label(requirements["length"][1], len(pw) >= 8)
-            update_label(
-                requirements["uppercase"][1], any(char.isupper() for char in pw)
-            )
-            update_label(
-                requirements["lowercase"][1], any(char.islower() for char in pw)
-            )
-            update_label(requirements["digit"][1], any(char.isdigit() for char in pw))
-            update_label(
-                requirements["special"][1], any(char in special_chars for char in pw)
-            )
-
-        label_height = 25
-        def update_label(label, condition):
-            if condition:
-                label.configure(text="✔️", text_color="green")
-            else:
-                label.configure(text="❌", text_color="red")
-
-        progressBar = ctk.CTkProgressBar(window, width=200, height=15, progress_color="green")
-        progressBar.set(0)
-        progressBar.grid(row=8, column=1, columnspan=3, padx=0, sticky="ew")
-        progressLabel = ctk.CTkLabel(window, text="0%", text_color="white")
-        progressLabel.grid(row=8, column=4, padx=(10, 0))
-
-        def update_progress(progress):
-            progressBar.set(progress)
-            progressLabel.configure(text=f"{progress:.2f}%")
-
-        def encryption_process():
-            if not all(label[1].cget("text") == "✔️" for label in requirements.values()):
-                messagebox.showerror("Error", "Please meet all password requirements!")
-                return
-            password = passwordEntry.get()
-
-            def run_encryption():
-                DeviceEncryption.encryptDirectory(self.Dropdown.get(), password, update_progress)
-                messagebox.showinfo("Success", "Encryption process completed!")
-
-            encryption_thread = threading.Thread(target=run_encryption)
-            encryption_thread.start()
-            
-        requirements = {
-            "length": [
-                ctk.CTkLabel(
-                    window,
-                    text="At least 8 characters",
-                    fg_color=("white", "gray75"),
-                    corner_radius=8,
-                    text_color="black",
-                    height=20,
-                    anchor="w",
-                ),
-                ctk.CTkLabel(window, text="❌", text_color="red", height=label_height),
-            ],
-            "uppercase": [
-                ctk.CTkLabel(
-                    window,
-                    text="At least one uppercase letter",
-                    fg_color=("white", "gray75"),
-                    corner_radius=8,
-                    text_color="black",
-                    height=20,
-                    anchor="w",
-                ),
-                ctk.CTkLabel(window, text="❌", text_color="red", height=label_height),
-            ],
-            "lowercase": [
-                ctk.CTkLabel(
-                    window,
-                    text="At least one lowercase letter",
-                    fg_color=("white", "gray75"),
-                    corner_radius=8,
-                    text_color="black",
-                    height=20,
-                    anchor="w",
-                ),
-                ctk.CTkLabel(window, text="❌", text_color="red", height=label_height),
-            ],
-            "digit": [
-                ctk.CTkLabel(
-                    window,
-                    text="At least one digit",
-                    fg_color=("white", "gray75"),
-                    corner_radius=8,
-                    text_color="black",
-                    height=20,
-                    anchor="w",
-                ),
-                ctk.CTkLabel(window, text="❌", text_color="red", height=label_height),
-            ],
-            "special": [
-                ctk.CTkLabel(
-                    window,
-                    text="At least one special character",
-                    fg_color=("white", "gray75"),
-                    corner_radius=8,
-                    text_color="black",
-                    height=20,
-                    anchor="w",
-                ),
-                ctk.CTkLabel(window, text="❌", text_color="red", height=label_height),
-            ],
-        }
-
-        passwordEntry = ctk.CTkEntry(
-            window, placeholder_text="Enter password:", show="*", height=30, font=("", 13)
-        )
-        passwordEntry.grid(
-            row=1, column=1, columnspan=4, padx=0, pady=(0, 30), sticky="ew"
-        )
-        passwordEntry.bind("<KeyRelease>", check_password)
-
-        for i, label in enumerate(requirements.values(), start=1):
-            label[0].grid(row=i+1, column=2, columnspan=3, padx=(0, 10), pady=3, sticky="ew")
-            label[1].grid(row=i+1, column=1, pady=3, sticky="ew")
-
-        encryptButton = ctk.CTkButton(window, text="Encrypt Device", command=encryption_process)
-        encryptButton.grid(row=7, column=1, columnspan=4, padx=0, pady=30, sticky="ew")
-
-        window.grid_rowconfigure(0, weight=1)
-        window.grid_rowconfigure(9, weight=1)
-
-        window.grid_columnconfigure(0, weight=1)
-        window.grid_columnconfigure(5, weight=1)
-
-        
-
-    def encrypt_window(self):
+    def open_encryption_window(self):
         if self.Dropdown.get() in ["Select a device", "...", "No devices found"]:
             messagebox.showerror("Error", "Please select a valid device to encrypt!")
             return
+        encrypted_data = os.path.join(self.Dropdown.get(), "encrypted_data.aes")
+        if os.path.exists(encrypted_data):
+            messagebox.showerror("Error", "This device is already encrypted!")
+            return
+        
+        if self.top_window_encryption is None or not self.top_window_encryption.winfo_exists():
+            self.top_window_encryption = TopEncryption(self, self.Dropdown.get())    
+        else:
+            self.top_window_encryption.deiconify()
+            self.top_window_encryption.focus()
 
-        self.encryptionWindow()
-
-
-
-    def decrypt_window(self):
+    def open_decryption_window(self):
         if self.Dropdown.get() in ["Select a device", "...", "No devices found"]:
             messagebox.showerror("Error", "Please select a valid device to decrypt!")
             return
@@ -213,6 +315,12 @@ class MainApp(ctk.CTk):
         if not os.path.exists(encrypted_data):
             messagebox.showerror("Error", "This device is not encrypted!")
             return
+
+        if self.top_window_decryption is None or not self.top_window_decryption.winfo_exists():
+            self.top_window_decryption = TopDecryption(self, self.Dropdown.get())
+        else:
+            self.top_window_decryption.deiconify()
+            self.top_window_decryption.focus()
 
     def centerScreen(self):
         screen_width = self.winfo_screenwidth()
