@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw
 
 import DeviceEncryption
 
+ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("styles.json")
 
 class TopEncryption(ctk.CTkToplevel):
