@@ -3,7 +3,7 @@
 
 EncryptMe is a user-friendly Windows application designed to provide robust encryption and decryption for your external drives. Utilizing AES encryption in GCM mode, EncryptMe ensures that your files are securely encrypted and can only be decrypted with the correct password to ensure your data remains secure. The application enforces strong password policies and supports key derivation using PBKDF2HMAC for enhanced security.
 
-![Main interface of EncryptMe](images_readme/main.png)
+![Main interface of EncryptMe](images/main.png)
 
 ## Prerequisites
 
