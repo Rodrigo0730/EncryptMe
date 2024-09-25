@@ -3,16 +3,12 @@
 
 EncryptMe is a user-friendly Windows application designed to provide robust encryption and decryption for your external drives. Utilizing AES encryption in GCM mode, EncryptMe ensures that your files are securely encrypted and can only be decrypted with the correct password to ensure your data remains secure. The application enforces strong password policies and supports key derivation using PBKDF2HMAC for enhanced security.
 
-
+![Main interface of EncryptMe](images_readme/main.png)
 
 ## Prerequisites
 
 - Python 3.11 or higher
 - Required python packages from requirements.txt
-
-
-
-
 
 ## Installation
 
@@ -37,13 +33,12 @@ EncryptMe is a user-friendly Windows application designed to provide robust encr
     ```sh
         python main.py
     ```
-    
 ## Contributing
 
 Contributions are welcome! Please fork the repository and submit a pull request.
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the BSD 3-Clause License - see the [LICENSE](./LICENSE) file for details.
 
     
